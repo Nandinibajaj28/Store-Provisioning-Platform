@@ -1,0 +1,24 @@
+wordpressUsername: admin
+wordpressPassword: admin123
+wordpressEmail: admin@test.com
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: REPLACE_HOSTNAME
+
+mariadb:
+  primary:
+    persistence:
+      size: 8Gi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1001
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false

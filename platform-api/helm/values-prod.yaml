@@ -1,0 +1,16 @@
+wordpressUsername: admin
+wordpressPassword: admin123
+wordpressEmail: admin@yourdomain.com
+
+service:
+  type: ClusterIP
+
+ingress:
+  enabled: true
+  ingressClassName: nginx
+  hostname: REPLACE_HOSTNAME
+
+mariadb:
+  primary:
+    persistence:
+      size: 20Gi
