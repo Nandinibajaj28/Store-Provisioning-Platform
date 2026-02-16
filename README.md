@@ -4,7 +4,6 @@ A Kubernetes-based platform that provisions isolated WooCommerce stores on-deman
 
 Each store runs in its own namespace with full isolation, quotas, and guardrails.
 
----
 
 # 🚀 Features
 
@@ -18,7 +17,6 @@ Each store runs in its own namespace with full isolation, quotas, and guardrails
 - Idempotent provisioning (`helm upgrade --install`)
 - Dashboard for managing stores
 
----
 
 # 🏗 Architecture Overview
 
@@ -34,8 +32,6 @@ Each store gets:
 - LimitRange
 - Secret
 
----
-
 # 🖥 Local Setup (Kind)
 
 ## 1️⃣ Install Dependencies
@@ -45,8 +41,6 @@ Each store gets:
 - kubectl
 - Helm
 - Kind
-
----
 
 ## 2️⃣ Create Kind Cluster
 
@@ -62,9 +56,8 @@ kind create cluster
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 ```
 
-Wait until ingress controller is running.
+Wait until the ingress controller is running.
 
----
 
 ## 4️⃣ Update Hosts File
 
@@ -73,8 +66,6 @@ Add:
 ```
 127.0.0.1 *.localhost
 ```
-
----
 
 ## 5️⃣ Start Backend
 
@@ -89,8 +80,6 @@ Runs at:
 http://localhost:4000
 ```
 
----
-
 ## 6️⃣ Start Dashboard
 
 ```bash
@@ -103,9 +92,6 @@ Runs at:
 ```
 http://localhost:3000
 ```
-
----
-
 # 🏪 Create a Store
 
 Via Dashboard  
@@ -125,16 +111,12 @@ Then open:
 http://store-store1.localhost
 ```
 
----
-
 # 🛒 Place Order
 
 1. Complete WooCommerce setup
 2. Add product
 3. Add to cart
 4. Checkout
-
----
 
 # 🗑 Delete Store
 
@@ -144,9 +126,6 @@ OR
 ```bash
 DELETE http://localhost:4000/stores/store1
 ```
-
----
-
 # 🔒 Isolation & Guardrails
 
 Each store namespace includes:
@@ -164,8 +143,6 @@ Each store namespace includes:
 - Default container request: 250m CPU / 256Mi memory
 - Default container limit: 500m CPU / 512Mi memory
 
----
-
 # 🛡 Security
 
 - Per-store namespace isolation
@@ -174,8 +151,6 @@ Each store namespace includes:
 - Max 5 stores per platform
 - Helm idempotent installs
 - Cleanup on provisioning failure
-
----
 
 # 📈 Horizontal Scaling Plan
 
@@ -190,8 +165,6 @@ For production:
 - Use Redis queue for provisioning jobs
 - Use HPA for API
 - Use dedicated StorageClass
-
----
 
 # 🌍 VPS Deployment (k3s)
 
@@ -215,8 +188,6 @@ Changes:
 - Production storage class
 - Strong secrets
 
----
-
 # 🔁 Upgrade & Rollback
 
 Helm provides safe upgrades:
@@ -231,7 +202,6 @@ Rollback:
 helm rollback <release> <revision>
 ```
 
----
 
 # 📊 Observability
 
@@ -240,13 +210,10 @@ Future improvements:
 - Store-level activity log
 - Provisioning duration metrics
 
----
-
 # 📌 System Design & Tradeoffs
 
 See `system-design.md`
 
----
 
 # 💡 Improvements (Future Work)
 
@@ -256,8 +223,6 @@ See `system-design.md`
 - Cert-manager TLS
 - Async job queue
 - Persistent store metadata database
-
----
 
 # 📄 License
 
