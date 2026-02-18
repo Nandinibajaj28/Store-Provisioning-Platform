@@ -31,43 +31,69 @@ async function waitForWordpressReady(namespace, storeObj, releaseName) {
 
   const poll = async () => {
     try {
-      const response = await coreApi.listNamespacedPod(namespace);
-      const pods = response.body.items;
+      const response = await coreApi.listNamespacedPod({ namespace });
+      const pods = response.items || response.body?.items;
 
+      if (!pods || pods.length === 0) {
+        console.log(`[POLL] ${storeObj.name}: No pods yet`);
+        return retry();
+      }
+
+      // Find WordPress pod
       const wpPod = pods.find(p =>
-        p.metadata.name.includes("wordpress")
+        p.metadata.name.toLowerCase().includes("wordpress")
       );
 
-      if (wpPod) {
-        const isRunning = wpPod.status.phase === "Running";
-        const isReady =
-          wpPod.status.containerStatuses?.every(c => c.ready) ?? false;
-
-        if (isRunning && isReady) {
-          storeObj.status = "Ready";
-          console.log(`[SUCCESS] ${storeObj.name} Ready`);
-          return;
-        }
+      if (!wpPod) {
+        console.log(`[POLL] ${storeObj.name}: WP pod not found`);
+        return retry();
       }
+
+      const status = wpPod.status;
+
+      const containersReady =
+        status.containerStatuses &&
+        status.containerStatuses.length > 0 &&
+        status.containerStatuses.every(c => c.ready);
+
+      const isReady = status.phase === "Running" && containersReady;
+
+      console.log(
+        `[POLL] ${storeObj.name}: phase=${status.phase}, containersReady=${containersReady}`
+      );
+
+      if (isReady) {
+        storeObj.status = "Ready";
+        console.log(`[SUCCESS] ${storeObj.name} Ready`);
+        return;
+      }
+
     } catch (err) {
-      console.error("Polling error:", err.message);
+      console.error(`[POLL ERROR] ${storeObj.name}:`, err.message);
     }
 
+    retry();
+  };
+
+  function retry() {
     retries++;
     if (retries >= maxRetries) {
       storeObj.status = "Failed";
-      console.log("[TIMEOUT] Cleaning up failed store");
+      console.log(`[TIMEOUT] ${storeObj.name} failed`);
 
       exec(`helm uninstall ${releaseName} -n ${namespace}`);
       return;
     }
 
     setTimeout(poll, 10000);
-  };
+  }
 
   poll();
-}
 
+}
+app.get("/", (req, res) => {
+  res.json("Platform API is running..");
+});
 app.get("/stores", (req, res) => {
   res.json(stores);
 });
@@ -81,22 +107,24 @@ app.post("/stores", async (req, res) => {
   if (stores.length >= 5)
     return res.status(403).json({ error: "Maximum stores reached" });
 
-  const namespace = `store-${name.toLowerCase()}`;
+  const cleanName = name.trim().toLowerCase();
+  const namespace = `store-${cleanName}`;
   const hostname = `${namespace}.localhost`;
   const releaseName = namespace;
+
 
   console.log(`[AUDIT] Creating store ${name}`);
 
   const helmCommand =
-  `helm upgrade --install ${releaseName} bitnami/wordpress ` +
-  `--namespace ${namespace} --create-namespace ` +
-  `--set ingress.enabled=true ` +
-  `--set ingress.ingressClassName=nginx ` +
-  `--set ingress.hostname=${hostname} ` +
-  `--set wordpressUsername=admin ` +
-  `--set wordpressPassword=admin123 ` +
-  `--set wordpressEmail=admin@test.com ` +
-  `--set wordpressPlugins=woocommerce `;
+    `helm upgrade --install ${releaseName} bitnami/wordpress ` +
+    `--namespace ${namespace} --create-namespace ` +
+    `--set ingress.enabled=true ` +
+    `--set ingress.ingressClassName=nginx ` +
+    `--set ingress.hostname=${hostname} ` +
+    `--set wordpressUsername=admin ` +
+    `--set wordpressPassword=admin123 ` +
+    `--set wordpressEmail=admin@test.com ` +
+    `--set wordpressPlugins=woocommerce `;
 
   exec(helmCommand, async (error, stdout, stderr) => {
     if (error) {
@@ -107,32 +135,41 @@ app.post("/stores", async (req, res) => {
     }
 
     try {
-      await coreApi.createNamespacedSecret(namespace, {
-        metadata: { name: "wp-secret" },
-        stringData: { wordpressPassword: "admin123" }
+      await coreApi.createNamespacedSecret({
+        namespace,
+        body: {
+          metadata: { name: "wp-secret" },
+          stringData: { wordpressPassword: "admin123" }
+        }
       });
 
-      await coreApi.createNamespacedResourceQuota(namespace, {
-        metadata: { name: "store-quota" },
-        spec: {
-          hard: {
-            pods: "10",
-            "requests.cpu": "2",
-            "requests.memory": "2Gi",
-            "limits.cpu": "4",
-            "limits.memory": "4Gi"
+      await coreApi.createNamespacedResourceQuota({
+        namespace,
+        body: {
+          metadata: { name: "store-quota" },
+          spec: {
+            hard: {
+              pods: "10",
+              "requests.cpu": "2",
+              "requests.memory": "2Gi",
+              "limits.cpu": "4",
+              "limits.memory": "4Gi"
+            }
           }
         }
       });
 
-      await coreApi.createNamespacedLimitRange(namespace, {
-        metadata: { name: "store-limit-range" },
-        spec: {
-          limits: [{
-            type: "Container",
-            default: { cpu: "500m", memory: "512Mi" },
-            defaultRequest: { cpu: "250m", memory: "256Mi" }
-          }]
+      await coreApi.createNamespacedLimitRange({
+        namespace,
+        body: {
+          metadata: { name: "store-limit-range" },
+          spec: {
+            limits: [{
+              type: "Container",
+              default: { cpu: "1000m", memory: "1Gi" },
+              defaultRequest: { cpu: "500m", memory: "512Mi" }
+            }]
+          }
         }
       });
 
@@ -142,7 +179,7 @@ app.post("/stores", async (req, res) => {
 
     const newStore = {
       id: Date.now(),
-      name,
+      name: cleanName,
       type,
       status: "Provisioning",
       namespace,
@@ -160,12 +197,15 @@ app.post("/stores", async (req, res) => {
 
 
 app.delete("/stores/:name", (req, res) => {
-  const name = req.params.name.toLowerCase();
+  const name = req.params.name.toLowerCase().trim();
   const releaseName = `store-${name}`;
   const namespace = releaseName;
 
-  exec(`helm uninstall ${releaseName} -n ${namespace}`, () => {
-    stores = stores.filter(s => s.name !== name);
+  exec(`helm uninstall ${releaseName} -n ${namespace}`, (error) => {
+    if (error) {
+      console.error(`[ERROR] Delete failed for ${name}:`, error.message);
+    }
+    stores = stores.filter(s => s.name.toLowerCase() !== name);
     res.json({ message: "Store deleted" });
   });
 });
